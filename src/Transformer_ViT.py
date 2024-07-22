@@ -1,0 +1,84 @@
+# -*- coding: utf-8 -*-
+# @Author  : Monster_Xia
+# @Time    : 2023/4/29 15:07
+# @Function:
+
+import torch
+import torch.nn as nn
+
+
+class ImageEncoder(nn.Module):
+    def __init__(self, img_size=32, patch_size=4, in_channels=2, embedding_dim=32, num_heads=16, num_layers=3,
+                 dropout=0.1):
+        super(ImageEncoder, self).__init__()
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.num_patches = (img_size // patch_size) ** 2
+        self.embedding_dim = embedding_dim
+        self.patch_embed = nn.Conv2d(in_channels, embedding_dim, kernel_size=patch_size, stride=patch_size)
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embedding_dim))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
+        self.dropout = nn.Dropout(dropout)
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=num_heads, dropout=dropout),
+            num_layers=num_layers
+        )
+        self.linear = nn.Linear(self.num_patches, 1)
+
+    def forward(self, x):
+        x = self.patch_embed(x)  # (batch_size, embedding_dim, num_patches_h, num_patches_w)
+        x = x.flatten(2).transpose(1, 2)  # (batch_size, num_patches, embedding_dim)
+        x += self.pos_embed
+        nn_input = x
+        x = self.dropout(x)  # (batch_size, num_patches, embedding_dim)
+        x = self.transformer_encoder(x)  # (batch_size, num_patches, embedding_dim)
+        x = self.linear(x.transpose(1, 2))  # (batch_size, embedding_dim, 1)
+        x = x.flatten(1)  # (batch_size, embedding_dim)
+
+        return x, nn_input
+
+
+class ImageDecoder(nn.Module):
+    def __init__(self, img_size=32, patch_size=4, in_channels=2, embedding_dim=32, num_heads=16, num_layers=3,
+                 dropout=0.1):
+        super(ImageDecoder, self).__init__()
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.sqrt_num_patches = img_size // patch_size
+        self.num_patches = (img_size // patch_size) ** 2
+        self.embedding_dim = embedding_dim
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embedding_dim))
+        self.unpatch_embed = nn.ConvTranspose2d(embedding_dim, in_channels, kernel_size=patch_size, stride=patch_size)
+        self.dropout = nn.Dropout(dropout)
+        self.transformer_decoder = nn.TransformerDecoder(
+            nn.TransformerDecoderLayer(d_model=embedding_dim, nhead=num_heads, dropout=dropout),
+            num_layers=num_layers
+        )
+        self.linear = nn.Linear(embedding_dim, embedding_dim * self.num_patches)
+
+    def forward(self, target, x):
+        x = self.linear(x)
+        x = torch.reshape(x, [-1, self.num_patches, self.embedding_dim])
+        x = self.transformer_decoder(target, x)
+        x -= self.pos_embed  # (batch_size, num_patches, embedding_dim)
+        x = x.transpose(1, 2).reshape(-1, self.embedding_dim, self.sqrt_num_patches, self.sqrt_num_patches)
+        x = self.unpatch_embed(x)
+
+        return x
+
+
+class ImageTransformer(nn.Module):
+    def __init__(self, img_size=32, patch_size=4, in_channels=2, embedding_dim=128, num_heads=4, num_layers=3,
+                 dropout=0.1):
+        super().__init__()
+        self.encoder = ImageEncoder(img_size=img_size, patch_size=patch_size, in_channels=in_channels,
+                                    embedding_dim=embedding_dim, num_heads=num_heads, num_layers=num_layers,
+                                    dropout=dropout)
+        self.decoder = ImageDecoder(img_size=img_size, patch_size=patch_size, in_channels=in_channels,
+                                    embedding_dim=embedding_dim, num_heads=num_heads, num_layers=num_layers,
+                                    dropout=dropout)
+
+    def forward(self, x):
+        coded, nn_input = self.encoder(x)
+        x = self.decoder(nn_input, coded)
+        return x
