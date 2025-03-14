@@ -79,8 +79,8 @@ def main():
 
     batch_size = 128
     lr = 0.001
-    gamma = 0.1
-    num_epochs = 20
+    gamma = 0.1 
+    num_epochs = 200
     img_channels = 2
     img_height = 32
     img_width = 32

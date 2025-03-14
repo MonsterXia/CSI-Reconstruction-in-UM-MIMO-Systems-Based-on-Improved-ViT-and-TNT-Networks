@@ -98,10 +98,19 @@ class ImageDecoder(nn.Module):
         )
         self.linear = nn.Linear(embedding_dim, embedding_dim * self.num_patches)
 
+    def generate_square_subsequent_mask(self, size):
+        mask = torch.triu(torch.ones(size, size), diagonal=1)
+        mask = mask.float().masked_fill(mask == 1, float('-inf'))
+        return mask
+
     def forward(self, target, x):
         x = self.linear(x)
         x = torch.reshape(x, [-1, self.num_patches, self.embedding_dim])
-        x = self.transformer_decoder(target, x)
+
+        tgt_mask = self.generate_square_subsequent_mask(target.size(0))
+        tgt_mask = tgt_mask.to(x.device)
+
+        x = self.transformer_decoder(target, x, tgt_mask=tgt_mask)
         x -= self.pos_embed  # (batch_size, num_patches, embedding_dim)
         x = x.transpose(1, 2).reshape(-1, self.embedding_dim, self.sqrt_num_patches, self.sqrt_num_patches)
         x = self.unpatch_embed(x)

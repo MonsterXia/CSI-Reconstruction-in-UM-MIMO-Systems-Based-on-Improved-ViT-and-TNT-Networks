@@ -17,7 +17,7 @@ output_list = []
 batch_size = 128
 lr = 0.001
 momentum = 0.9
-num_epochs = 10
+num_epochs = 1
 img_channels = 2
 img_height = 32
 img_width = 32
@@ -49,7 +49,7 @@ for envir in Environment:
         mse, rho = test(model, test_dataloader, criterion, device, img_height, img_width)
 
 
-        output_list.append("CsiNet_{}_{}: \n\tmse:{:.2f}dB\n\trho:{:.2f}".format(envir.name, encoded_dim.value, db_conversion(mse), rho))
+        output_list.append("CsiNet_{}_{}: \n\t mse:{:.2f}dB\n\trho:{:.2f}".format(envir.name, encoded_dim.value, db_conversion(mse), rho))
 
 print('\n'.join(output_list))
 
